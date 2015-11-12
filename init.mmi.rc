@@ -1,5 +1,6 @@
 # Moto USB configuration
 import init.mmi.usb.rc
+import init.mmi.diag.rc
 
 on early-init
     # Set boot up stage I/O scheduler
@@ -12,10 +13,13 @@ on early-init
     mkdir /fsg 755 root root
 
     chown system system /sys/kernel/debug
-    chmod 0775 /sys/kernel/debug
+    chmod 0770 /sys/kernel/debug
 
     # Mount point for Digital Personalization partition
     mkdir /customize 0500 root root
+
+    # boot with max freq, will be reset in post_boot script
+    write /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq 2457600
 
 on charger
     trigger early-fs
@@ -23,6 +27,7 @@ on charger
     trigger post-fs
     trigger post-fs-data
     trigger moto-charger
+    class_stop main
 
 on moto-charger
     setprop ro.board.platform msm8974
@@ -41,25 +46,44 @@ on init
     chown root diag /sys/kernel/dropbox/event
     chown root diag /sys/kernel/dropbox/data
 
-    # Enable more binder logs for debugging purpose
-    write /sys/module/binder/parameters/debug_mask 0x10005
-
     # ESDFS
     chown mot_esdfs root /proc/fs/esdfs/packages
 
 on fs
     # Mount PDS
     wait /dev/block/platform/msm_sdcc.1/by-name/pds
-    exec /system/bin/mountpds -d /dev/block/platform/msm_sdcc.1/by-name/pds -m rw
+    exec /system/bin/e2fsck -y /dev/block/platform/msm_sdcc.1/by-name/pds
+    exec /system/bin/logwrapper /system/bin/mount_ext4.sh pds /dev/block/platform/msm_sdcc.1/by-name/pds /pds 2048 500 defcontext=u:object_r:pds_file:s0
+    restorecon_recursive /pds
+
+    mkdir /pds/camera 0755 mot_tcmd mot_tcmd
+    mkdir /pds/factory 0755 mot_tcmd mot_tcmd
+    mkdir /pds/public 0755 mot_tcmd mot_tcmd
+    mkdir /pds/public/atvc 0770 mot_atvc shell
+    mkdir /pds/public/battd 0755 mot_accy mot_tcmd
+    mkdir /pds/public/hiddenmenu 0755 radio radio
+    mkdir /pds/public/hiddenmenu/data 0775 system mot_tcmd
+    mkdir /pds/public/locale 0700 system system
+    mkdir /pds/public/omadm 0700 radio radio
+    mkdir /pds/public/svcs 0770 system system
+    mkdir /pds/wifi 0755 mot_tcmd mot_tcmd
+    mkdir /pds/bt 0755 mot_tcmd bluetooth
+    mkdir /pds/wmdrm 0775 mot_drm mot_drm
+    mkdir /pds/security 02770 mot_tpapi mot_tpapi
+    mkdir /pds/batt_health 0755 mot_pwric mot_pwric
+
+    chown mot_tcmd mot_tcmd /pds/factory/fti
+    chmod 0660 /pds/factory/fti
+    chown mot_tcmd mot_tcmd /pds/factory/byte
+    chmod 0660 /pds/factory/byte
+    chmod 0660 /pds/wifi/wlan_mac.bin
+    chown mot_tcmd mot_tcmd /pds/bt/bt_bdaddr
+    chmod 0664 /pds/bt/bt_bdaddr
+    chmod 0600 /pds/whisper/whisper_only/vector0.bin
 
     # Mount modem FSG partition
     wait /dev/block/platform/msm_sdcc.1/by-name/fsg
-    mount ext4 /dev/block/platform/msm_sdcc.1/by-name/fsg /fsg ro nosuid nodev barrier=0 defcontext=u:object_r:modem_file:s0
-
-    #Backup ramconsole on abnormal reboot.
-    copy /proc/last_kmsg /data/dontpanic/last_kmsg
-    chown root log /data/dontpanic/last_kmsg
-    chmod 0640 /data/dontpanic/last_kmsg
+    mount ext4 /dev/block/platform/msm_sdcc.1/by-name/fsg /fsg ro nosuid nodev barrier=0 context=u:object_r:fsg_file:s0
 
     # Set correct permissions for HOB, DHOB
     exec /system/bin/chmod -L 660 /dev/block/platform/msm_sdcc.1/by-name/hob
@@ -95,21 +119,11 @@ on post-fs-data
     chown mot_pwric mot_pwric /sys/class/power_supply/battery/device/force_chg_usb_otg_ctl
 
    # Setup correct permissions for dbvc and atvc
-    mkdir /pds/public/atvc 0770 mot_atvc shell
-    chmod 0770 /pds/public/atvc
     mkdir /data/local/dbvc 0750 mot_tcmd shell
     mkdir /data/local/atvc 0775 mot_tcmd shell
 
-    # Wifi
-    restorecon /data/hostapd
-    restorecon /data/misc/wifi/hostapd/wlan0
-
    # Create moodle directory that MOODLE APP can write to
     mkdir /data/local/moodle 0770 graphics mot_tcmd
-
-    # services directory for activation
-    mkdir /pds/public/svcs 0770 system mot_tcmd
-    chmod 0770 /pds/public/svcs
 
     # Setup folders for diag_mdlog
     mkdir /data/diag_mdlog 0750 system log
@@ -118,15 +132,14 @@ on post-fs-data
     # Setup folder for native to transfer data to NativeDropBoxAgent
     mkdir /data/system/dropbox-add 0730 system diag
 
+    # Setup folder for camera HAL subsystem
+    mkdir /data/camera_dump 0750 media media
+
     # Set correct permissions for UTAGS
     exec /system/bin/chown -L mot_tcmd:system /dev/block/platform/msm_sdcc.1/by-name/utags
     exec /system/bin/chown -L mot_tcmd:system /dev/block/platform/msm_sdcc.1/by-name/utagsBackup
     exec /system/bin/chmod -L 0660 /dev/block/platform/msm_sdcc.1/by-name/utags
     exec /system/bin/chmod -L 0660 /dev/block/platform/msm_sdcc.1/by-name/utagsBackup
-
-    # backup directory for omadm
-    mkdir /pds/public/omadm 0700 radio radio
-    chmod 0700 /pds/public/omadm
 
     #Subsystem RAM-dumps
     mkdir /data/ss-ram-dumps 0750 radio log
@@ -136,8 +149,9 @@ on post-fs-data
     # Create directory for cutback
     mkdir /data/misc/cutback 0770 radio wifi
 
-    # To remove apanic proc entry
-    write /proc/apanic_console 1
+    #setup folder for WLAN WAPI
+    mkdir /data/wapi_certificate 0750 system wifi
+    chown system wifi /data/wapi_certificate
 
     # Create directory used by power_supply_logger
     mkdir /data/power_supply_logger 0750 mot_pwric log
@@ -150,6 +164,17 @@ on post-fs-data
 
     start batt_health
     start hvdcp
+
+on post-fs
+    swapon_all fstab.qcom
+    write /proc/sys/vm/page-cluster 0
+    write /proc/sys/vm/swappiness 100
+
+# To report kernel panic
+service apanic_annotate  /system/bin/sh /system/bin/apanic_annotate.sh build
+    class late_start
+    group log
+    oneshot
 
 service charge_only_mode /system/bin/charge_only_mode
     user root
@@ -177,12 +202,8 @@ service stm401 /system/bin/stm401 boot
     group compass misc input
     oneshot
 
-on property:hw.aov.c55_ready=1
+on property:hw.touch.ready=1
     start stm401
-
-on early-boot
-# Annotate panics with helpful information
-     exec /system/bin/apanic_annotate.sh build
 
 on boot
     # Change ownership and permission for vibrator
@@ -194,11 +215,6 @@ on boot
 
     # Setup folder for aplogd
     mkdir /data/aplogd 0750 log log
-
-    # Change the ownership of touch screen files for tcmd
-    chown root mot_tcmd /sys/bus/i2c/drivers/atmel_mxt_ts/3-004a/drv_irq
-    chown root mot_tcmd /sys/bus/i2c/drivers/atmel_mxt_ts/3-004a/hw_irqstat
-    chown root mot_tcmd /sys/bus/i2c/drivers/atmel_mxt_ts/3-004a/reset
 
     # Change the ownership of display TE files for tcmds
     chown root mot_tcmd /sys/class/graphics/fb0/te_enable
@@ -281,7 +297,7 @@ on boot
     setprop persist.audio.calfile6 /etc/acdbdata/${ro.hw.device}/${ro.hw.device}_Speaker_cal.acdb
 
 service adspd /system/bin/adspd /dev/ttyHS3
-    class late_start
+    class main
     socket adspdsock stream 0660 system audio
     user audio
     group audio input diag
@@ -299,16 +315,12 @@ on property:ro.bootmode=mot-factory
 on property:tcmd.suspend=1
     stop surfaceflinger
     stop zygote
-    stop sensors
-    write /sys/kernel/factory_gsbi12_mode/install 1
     setprop debug.sf.nobootanimation 1
 
 # Normal to suspend
 on property:tcmd.suspend=2
     stop surfaceflinger
     stop zygote
-    stop sensors
-    write /sys/kernel/factory_gsbi12_mode/install 1
     setprop debug.sf.nobootanimation 1
 
 service tcmd /system/bin/tcmd
@@ -328,28 +340,8 @@ service tcmdhelp /system/bin/tcmdhelp
 on property:tcmd.start_tcmdhelp=1
     start tcmdhelp
 
-# Backup/Restore Feature
-on property:mot.backup_restore.status="Finished"
-    start zygote
-    service mot_backup /system/bin/logwrapper /system/xbin/run_backup /system/etc/backup_targets.csv
-    disabled
-    user root
-    oneshot
-
-    service mot_restore /system/bin/logwrapper /system/xbin/run_restore /system/etc/backup_targets.csv
-    disabled
-    user root
-    oneshot
-
-on property:mot.backup_restore.action="run_backup"
-    setprop mot.backup_restore.status "Running"
-    stop zygote
-    start mot_backup
-
-on property:mot.backup_restore.action="run_restore"
-    setprop mot.backup_restore.status "Running"
-    stop zygote
-    start mot_restore
+on property:persist.mot.demo_mode_charging=1
+    write /sys/class/power_supply/battery/device/force_demo_mode 1
 
 on property:persist.log.aplogd.enable=1
     start aplogd
@@ -367,7 +359,7 @@ service aplogd /system/bin/aplogd
     # for kernel logging.
     disabled
 
-service mmi-radio-sh /system/bin/logwrapper /system/bin/sh /init.mmi.radio.sh
+service mmi-radio-sh /system/bin/sh /init.mmi.radio.sh
     class core
     user radio
     group radio
@@ -377,6 +369,9 @@ on property:persist.sys.diag_mdlog.on=1
     start diag_mdlog
 
 on property:persist.sys.diag_mdlog.on=0
+    stop diag_mdlog
+
+on property:log.diag_mdlog.invld_mode_stop=1
     stop diag_mdlog
 
 service diag_mdlog /system/bin/diag_mdlog-wrap
@@ -410,30 +405,23 @@ service bugreport /system/bin/bug2go-bugreport
     oneshot
     keycodes 115 116 # VOLUME_UP + PWR
 
-service kpgather /system/bin/kpgather
-    class core
-    #user system
-    #group system log
-    # The user and group definitions above are intentionally disabled and left
-    # only as documentation. It actually starts as root and immediately drops
-    # to system plus those groups after preserving CAP_SYSLOG, which is
-    # required for reading kernel logs.
-    oneshot
-
 on property:sys.boot_completed=1
     start qe
     # restore the default I/O scheduler for mobile device
-    write /sys/block/mmcblk0/queue/scheduler row
+    write /sys/block/mmcblk0/queue/scheduler cfq
 
-service mmi-boot-sh /system/bin/logwrapper /system/bin/sh /init.mmi.boot.sh
+service mmi-boot-sh /system/bin/sh /init.mmi.boot.sh
     class core
     user root
     oneshot
 
-service mmi-touch-sh /system/bin/logwrapper /system/bin/sh /init.mmi.touch.sh atmel
-    class late_start
+service mmi-touch-sh /system/bin/sh /init.mmi.touch.sh atmel
+    disabled
     user root
     oneshot
+
+on property:hw.aov.c55_ready=1
+    start mmi-touch-sh
 
 on property:ro.secure=0
     # disable dmesg restrict for insecure builds
@@ -444,8 +432,11 @@ on property:ro.debuggable=1
     write /proc/sys/kernel/dmesg_restrict 0
     # enable group read/write to /dev/log/kernel
     chmod 0660 /dev/log/kernel
+    # debugfs
+    chmod 0775 /sys/kernel/debug
 
-service hw_revs /system/bin/logwrapper /system/bin/hardware_revisions.sh
+
+service hw_revs /system/bin/sh /system/bin/hardware_revisions.sh
     class main
     user system
     group system
@@ -482,8 +473,18 @@ service atvc /system/bin/dbvc_atvc_property_set
 
 service qe /xbin/qe /system
    class main
+   seclabel u:r:qe:s0
    oneshot
    disabled
+
+service qe_broadcast /xbin/qe /system -b
+   class main
+   seclabel u:r:qe:s0
+   oneshot
+   disabled
+
+on property:persist.qe.trigger=1
+   start qe_broadcast
 
 service ss_rdump /system/bin/subsystem_ramdump 1 0
    class late_start

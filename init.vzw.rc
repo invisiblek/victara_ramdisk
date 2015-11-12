@@ -7,7 +7,8 @@ on boot
     chmod 0644 /pds/public/hiddenmenu/data/program
     chmod 0644 /pds/public/hiddenmenu/data/akey
     chmod 0644 /pds/public/hiddenmenu/data/fts
-
+#Permission for telephony
+    mkdir /pds/public/telephony 0770 radio radio
 on fs
     # Load FIPS kernel module
     exec /system/bin/fips_loader /system/lib/modules

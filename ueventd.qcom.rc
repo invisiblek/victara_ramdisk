@@ -43,6 +43,8 @@
 /dev/smd6                 0660   system     system
 /dev/smd7                 0660   bluetooth  bluetooth
 
+/dev/block/platform/msm_sdcc.1/by-name/frp 0600 system system
+
 #permissions for CSVT
 /dev/smd11                0660   radio      radio
 
@@ -174,6 +176,7 @@
 /sys/devices/virtual/input/input*                   rept_xy        0664    root     input
 /sys/devices/virtual/input/input*                   rept_z         0664    root     input
 /sys/devices/virtual/input/input*                   bandwidth      0664    root     input
+/sys/devices/virtual/input/input*                   range          0664    root     input
 /sys/devices/virtual/input/input*                   driver/enable  0660    root     input
 /sys/devices/virtual/input/input*                   driver/delay   0660    root     input
 
@@ -239,6 +242,14 @@
 /dev/stm401               0660  system     compass
 /dev/stm401_as            0660  compass    compass
 /dev/stm401_ms            0660  compass    compass
+/sys/devices/virtual/stm401/stm401_as* timestamp_time_ns    0440 compass compass
+/sys/devices/virtual/stm401/stm401_as* rv_6axis_update_rate 0660 compass compass
+/sys/devices/virtual/stm401/stm401_as* rv_9axis_update_rate 0660 compass compass
+
+# Moto Sensors
+/dev/stml0xx               0660  system     compass
+/dev/stml0xx_as            0660  compass    compass
+/dev/stml0xx_ms            0660  compass    compass
 
 # Validity Sensor
 /dev/vfsspi               0660  fingerp    fingerp

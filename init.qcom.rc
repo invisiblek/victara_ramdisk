@@ -172,10 +172,6 @@ on boot
     # an ack packet comes out of order
     write /proc/sys/net/netfilter/nf_conntrack_tcp_be_liberal 1
 
-    # NFC local data and nfcee xml storage
-    mkdir /data/nfc 0770 nfc nfc
-    mkdir /data/nfc/param 0770 nfc nfc
-
     # When GPU woken by touch events, keep it on until first app render
     write /sys/class/kgsl/kgsl-3d0/wake_timeout 250
 
@@ -186,6 +182,10 @@ on post-fs-data
     chown media_rw media_rw /data/media
 
     mkdir /data/misc/bluetooth 0770 bluetooth bluetooth
+
+    # NFC local data and nfcee xml storage
+    mkdir /data/nfc 0770 nfc nfc
+    mkdir /data/nfc/param 0770 nfc nfc
 
     # Create the directories used by the Wireless subsystem
     mkdir /data/misc/wifi 0770 wifi wifi
@@ -252,14 +252,14 @@ on post-fs-data
 
     setprop vold.post_fs_data_done 1
 
-    #Create a folder for SRS to be able to create a usercfg file
-    mkdir /data/data/media 0770 media media
-
 #service qcomsysd /system/bin/qcom-system-daemon
 #    class main
 
 on property:persist.radio.atfwd.start=false
     stop atfwd
+
+on property:persist.radio.atfwd.start=true
+    start atfwd
 
 # corefile limit and ETB enabling
 on property:persist.debug.trace=1
@@ -300,12 +300,6 @@ on property:bluetooth.dun.status=running
 on property:bluetooth.dun.status=stopped
     stop bt-dun
 
-on property:bluetooth.startbtsnoop=true
-    start btsnoop
-
-on property:bluetooth.startbtsnoop=false
-    stop btsnoop
-
 service qcom-c_core-sh /system/bin/sh /init.qcom.class_core.sh
     class core
     user root
@@ -331,7 +325,7 @@ on property:vold.decrypt=trigger_restart_framework
 on property:persist.env.fastdorm.enabled=true
     setprop persist.radio.data_no_toggle 1
 
-service irsc_util /system/bin/logwrapper /system/bin/irsc_util "/etc/sec_config"
+service irsc_util /system/bin/irsc_util "/etc/sec_config"
     class main
     user root
     oneshot
@@ -406,30 +400,23 @@ on property:bluetooth.hciattach=false
 #    disabled
 #    oneshot
 
-service btsnoop /system/bin/btsnoop
-   user bluetooth
-   group bluetooth net_bt_admin sdcard_rw sdcard_r
-   class late_start
-   disabled
-   oneshot
+#service bridgemgrd /system/bin/bridgemgrd
+#    class late_start
+#    user radio
+#    group radio qcom_diag
+#    disabled
 
-service bridgemgrd /system/bin/bridgemgrd
-    class late_start
-    user radio
-    group radio qcom_diag
-    disabled
+#service port-bridge /system/bin/port-bridge /dev/smd0 /dev/ttyGS0
+#    class late_start
+#    user system
+#    group system inet
+#    disabled
 
-service port-bridge /system/bin/port-bridge /dev/smd0 /dev/ttyGS0
-    class late_start
-    user system
-    group system inet
-    disabled
-
-service qmiproxy /system/bin/qmiproxy
-    class main
-    user radio
-    group radio qcom_diag
-    disabled
+#service qmiproxy /system/bin/qmiproxy
+#    class main
+#    user radio
+#    group radio qcom_diag
+#    disabled
 
 # QMUX must be in multiple groups to support external process connections
 service qmuxd /system/bin/qmuxd
@@ -484,7 +471,7 @@ service btwlancoex /system/bin/sh /system/etc/init.qcom.coex.sh
 #    disabled
 #    oneshot
 
-service p2p_supplicant /system/bin/logwrapper /system/bin/wpa_supplicant \
+service p2p_supplicant /system/bin/wpa_supplicant \
     -ip2p0 -Dnl80211 -c/data/misc/wifi/p2p_supplicant.conf -N \
     -iwlan0 -Dnl80211 -c/data/misc/wifi/wpa_supplicant.conf -dddd \
     -I/system/etc/wifi/wpa_supplicant_overlay.conf \
@@ -498,7 +485,7 @@ service p2p_supplicant /system/bin/logwrapper /system/bin/wpa_supplicant \
     disabled
     oneshot
 
-service wpa_supplicant /system/bin/logwrapper /system/bin/wpa_supplicant \
+service wpa_supplicant /system/bin/wpa_supplicant \
     -iwlan0 -Dnl80211 -c/data/misc/wifi/wpa_supplicant.conf -dddd \
     -I/system/etc/wifi/wpa_supplicant_overlay.conf \
     -e/data/misc/wifi/entropy.bin -g@android:wpa_wlan0
@@ -651,21 +638,21 @@ service atfwd /system/bin/ATFWD-daemon
     user system
     group system radio
 
-service hostapd /system/bin/hostapd -dddd /data/hostapd/hostapd.conf
+service hostapd /system/bin/hostapd -dddd /data/misc/wifi/hostapd.conf
     class late_start
     user root
     group root
     oneshot
     disabled
 
-service ds_fmc_appd /system/bin/ds_fmc_appd -p "rmnet0" -D
-    class late_start
-    group radio wifi inet
-    disabled
-    oneshot
+#service ds_fmc_appd /system/bin/ds_fmc_appd -p "rmnet0" -D
+#    class late_start
+#    group radio wifi inet
+#    disabled
+#    oneshot
 
-on property:persist.data.ds_fmc_app.mode=1
-    start ds_fmc_appd
+#on property:persist.data.ds_fmc_app.mode=1
+#    start ds_fmc_appd
 
 #service ims_regmanager /system/bin/exe-ims-regmanagerprocessnative
 #    class late_start
@@ -685,18 +672,18 @@ on property:ro.data.large_tcp_window_size=true
 #    group system
 #    disabled
 
-service ril-daemon1 /system/bin/rild -c 1
+service ril-daemon1 /system/bin/rild -c 2
     class main
-    socket rild1 stream 660 root radio
-    socket rild-debug1 stream 660 radio system
+    socket rild2 stream 660 root radio
+    socket rild-debug2 stream 660 radio system
     user root
     disabled
     group radio cache inet misc audio sdcard_r sdcard_rw diag qcom_diag log
 
-service ril-daemon2 /system/bin/rild -c 2
+service ril-daemon2 /system/bin/rild -c 3
     class main
-    socket rild2 stream 660 root radio
-    socket rild-debug2 stream 660 radio system
+    socket rild3 stream 660 root radio
+    socket rild-debug3 stream 660 radio system
     user root
     disabled
     group radio cache inet misc audio sdcard_r sdcard_rw diag qcom_diag log

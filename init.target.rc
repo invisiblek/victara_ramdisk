@@ -28,7 +28,6 @@
 #
 
 import init.mmi.rc
-import init.mmi.volte.rc
 
 on early-init
     mkdir /firmware 0771 system system
@@ -42,11 +41,6 @@ on init
     # session is not exercised through RemoteDisplay in the android framework
     setprop persist.sys.wfd.virtual 0
 
-
-# import cne init file
-on post-fs
-    restorecon /data/media /data/media/0 /data/media/legacy /data/media/obb
-
 on fs
     mount_all fstab.qcom
 
@@ -56,22 +50,21 @@ on fs
 
     wait /dev/block/platform/msm_sdcc.1/by-name/cache
     exec /system/bin/e2fsck -y /dev/block/platform/msm_sdcc.1/by-name/cache
-    exec /system/bin/logwrapper /system/bin/mount_ext4.sh cache /dev/block/platform/msm_sdcc.1/by-name/cache /cache
+    exec /system/bin/mount_ext4.sh cache /dev/block/platform/msm_sdcc.1/by-name/cache /cache
 
+    # arrange access to an available overlay
     mkdir /overlay 0755 root root
-
-    # arrange access to the overlay
-    exec /system/bin/checknmount -d -s -m -t ext4 -r /overlay/sysupdate /cache/overlay/sysupdate.simg /cache/overlay/sysupdate.jar
-
-    # use the overlay, if it is compatible
-    exec /system/bin/stacker -d -c -r -t overlayfs /system /overlay/sysupdate
+    mkdir /cache/overlay 0775 system cache
+    exec /system/bin/checknmount -d -t ext4 /overlay/sysupdate /cache/overlay/sysupdate.simg /cache/overlay/sysupdate.jar
+    exec /system/bin/stacker -d /system /overlay/sysupdate
 
     wait /dev/block/platform/msm_sdcc.1/by-name/persist
-    mount ext4 /dev/block/platform/msm_sdcc.1/by-name/persist /persist nosuid nodev barrier=1 defcontext=u:object_r:persist_file:s0
+    mount ext4 /dev/block/platform/msm_sdcc.1/by-name/persist /persist nosuid nodev barrier=1
+    restorecon_recursive /persist
 
     wait /dev/block/platform/msm_sdcc.1/by-name/modem
     exec /system/bin/resize2fs /dev/block/platform/msm_sdcc.1/by-name/modem
-    mount ext4 /dev/block/platform/msm_sdcc.1/by-name/modem /firmware ro nosuid nodev barrier=0 defcontext=u:object_r:modem_file:s0
+    mount ext4 /dev/block/platform/msm_sdcc.1/by-name/modem /firmware ro nosuid nodev barrier=0 context=u:object_r:firmware_file:s0
 
 on post-fs-data
     mkdir /data/tombstones 0771 system system
@@ -104,11 +97,6 @@ service qseecomd /system/bin/qseecomd
 
 service mpdecision /system/bin/mpdecision --avg_comp --min_cores=4
    user root
-   disabled
-
-service qosmgrd /system/bin/qosmgr /system/etc/qosmgr_rules.xml
-   user system
-   group system
    disabled
 
 service thermal-engine /system/bin/thermal-engine

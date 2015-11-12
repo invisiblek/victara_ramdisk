@@ -11,22 +11,32 @@ do
 done
 shift $(($OPTIND-1))
 
+scriptname=${0##*/}
+
 debug()
 {
 	[ $dbg_on ] && echo "Debug: $*"
 }
 
+notice()
+{
+	echo "$*"
+	echo "$scriptname: $*" > /dev/kmsg
+}
+
 error_and_leave()
 {
-	err_code=$1
+	local err_msg
+	local err_code=$1
 	case $err_code in
-		1)  echo "Error: No response from touch IC";;
-		2)  echo "Error: Cannot read property $1";;
-		3)  echo "Error: No matching firmware file found";;
-		4)  echo "Error: Touch IC is in bootloader mode";;
-		5)  echo "Error: Touch provides no reflash interface";;
-		6)  echo "Error: Touch driver is not running";;
+		1)  err_msg="Error: No response from touch IC";;
+		2)  err_msg="Error: Cannot read property $1";;
+		3)  err_msg="Error: No matching firmware file found";;
+		4)  err_msg="Error: Touch IC is in bootloader mode";;
+		5)  err_msg="Error: Touch provides no reflash interface";;
+		6)  err_msg="Error: Touch driver is not running";;
 	esac
+	notice "$err_msg"
 	exit $err_code
 }
 
@@ -49,6 +59,11 @@ debug "sysfs touch path: $touch_path"
 
 [ -f $touch_path/doreflash ] || error_and_leave 5
 [ -f $touch_path/poweron ] || error_and_leave 5
+
+# Set permissions to enable factory touch tests
+chown root:mot_tcmd $touch_path/drv_irq
+chown root:mot_tcmd $touch_path/hw_irqstat
+chown root:mot_tcmd $touch_path/reset
 
 debug "wait until driver reports <ready to flash>..."
 while true; do
@@ -119,6 +134,7 @@ debug "touch config id: $str_cfg_id_boot"
 product_id=$(getprop $device_property 2> /dev/null)
 [ -z "$product_id" ] && error_and_leave 2 $device_property
 product_id=${product_id%-*}
+product_id=${product_id%_*}
 debug "product id: $product_id"
 
 hwrev_id=$(getprop $hwrev_property 2> /dev/null)
@@ -160,12 +176,15 @@ then
 	str_cfg_id_new=${property#*-}
 	debug "firmware config ids: expected $str_cfg_id_latest, current $str_cfg_id_new"
 
-	echo "Touch firmware config id at boot time $str_cfg_id_boot"
-	echo "Touch firmware config id in the file $str_cfg_id_latest"
-	echo "Touch firmware config id currently programmed $str_cfg_id_new"
+	notice "Touch firmware config id at boot time $str_cfg_id_boot"
+	notice "Touch firmware config id in the file $str_cfg_id_latest"
+	notice "Touch firmware config id currently programmed $str_cfg_id_new"
 else
-	echo "Touch firmware is up to date"
+	notice "Touch firmware is up to date"
 fi
+
+# let the next in line to proceed
+setprop hw.touch.ready 1
 
 unset device_property hwrev_property
 unset str_cfg_id_boot str_cfg_id_latest str_cfg_id_new
